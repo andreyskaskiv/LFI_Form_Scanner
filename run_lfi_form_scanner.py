@@ -50,9 +50,7 @@ async def test_command_execution_in_form(self, form: str, url: str, max_concurre
                     print(f"{Fore.RED}TimeoutError for payload: {payload}{Style.RESET_ALL}")
                 except aiohttp.ClientError as e:
                     print(f"{Fore.RED}ClientError: {e} for payload: {payload}{Style.RESET_ALL}")
-                # Wait before retrying
                 await asyncio.sleep(RETRY_DELAY)
-            # Return a failed result after retries
             return (False, payload)
 
     tasks = [bounded_submit_form(payload, answer) for answer, payload in product(ANSWERS, PAYLOADS)]
@@ -60,14 +58,14 @@ async def test_command_execution_in_form(self, form: str, url: str, max_concurre
     completed_tasks = 0
     for future in asyncio.as_completed(tasks):
         result = await future
-        if result[0]:  # Only append results where the response contains the answer
+        if result[0]:
             results.append((True, result[1]))
         completed_tasks += 1
         print(
             f"{Fore.LIGHTYELLOW_EX}{Style.BRIGHT}\rProgress: {completed_tasks}/{total_requests} requests completed{Style.RESET_ALL}",
             end='')
 
-    print()  # for newline after progress update
+    print()
     return results
 
 
@@ -113,33 +111,36 @@ class Scanner:
             if check_type(self.verbose):
                 print(f" \n====> POST_url: {post_url} | post_data: {post_data}")
             async with session.post(post_url, data=post_data) as response:
-                text = await response.text()
+                text = await response.text(errors="ignore")
                 return (answer in text, value)
 
         if check_type(self.verbose):
             print(f" \n====> GET_url: {post_url} | GET_data: {post_data}")
         async with session.get(post_url, params=post_data) as response:
-            text = await response.text()
+            text = await response.text(errors="ignore")
             return (answer in text, value)
 
-    async def run_scanner_async(self, case: Set[str], links_to_crawler,
-                                max_concurrent_requests: int):
+    async def run_scanner_async(self, case: Set[str], links_to_crawler, max_concurrent_requests: int):
         target_links = links_to_crawler
+        total_links = len(target_links)
 
-        for link in target_links:
+        for link_number, link in enumerate(target_links):
 
             forms = self.extract_forms(link)
-            for form in forms:
+            total_forms = len(forms)
+
+            for form_number, form in enumerate(forms):
                 if not any(form == existing_form for _, existing_form in self.all_forms):
                     self.all_forms.append((link, form))
 
                 if "command_in_form" in case:
-                    print(f"[ ] COMMAND Testing Form in: {link}")
+                    print(
+                        f"[{link_number + 1}/{total_links}] COMMAND Testing Form [{form_number + 1}/{total_forms}] in: {link}")
                     is_vulnerable_to_command_exec = await test_command_execution_in_form(self, form=form, url=link,
                                                                                          max_concurrent_requests=max_concurrent_requests)
                     if any(result[0] for result in is_vulnerable_to_command_exec):
                         self.target_forms_COMMAND.append((link, form, is_vulnerable_to_command_exec))
-                        self.logger.warning(f"\n[+] 💉 Discovered in:{link}\n"
+                        self.logger.warning(f"\n[+] 💉 Discovered in: {link}\n"
                                             f"{form}\n{'-' * 80}\n"
                                             f"[***] 💉 Payload:{is_vulnerable_to_command_exec}\n{'=' * 80}\n\n")
 
