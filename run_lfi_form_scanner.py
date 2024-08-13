@@ -82,9 +82,13 @@ class Scanner:
         self.file_lock = threading.Lock()
 
     def extract_forms(self, url: str):
-        response = self.session.get(url)
-        parsed_html = BeautifulSoup(response.content, features='lxml')
-        return parsed_html.findAll("form")
+        try:
+            response = self.session.get(url)
+            parsed_html = BeautifulSoup(response.content, features='lxml', from_encoding='utf-8')
+            return parsed_html.findAll("form")
+        except requests.exceptions.ConnectionError as e:
+            print(f"{Fore.RED}ConnectionError: {e} for URL: {url}{Style.RESET_ALL}")
+            return []
 
     async def submit_form_async(self, session, form, value: str, url: str, answer: str) -> Tuple[bool, str]:
         action = form.get("action")
@@ -134,8 +138,8 @@ class Scanner:
                     self.all_forms.append((link, form))
 
                 if "command_in_form" in case:
-                    print(
-                        f"[{link_number + 1}/{total_links}] COMMAND Testing Form [{form_number + 1}/{total_forms}] in: {link}")
+                    print(f"[{link_number + 1}/{total_links}] COMMAND Testing Form [{form_number + 1}/{total_forms}] "
+                          f"in: {link}")
                     is_vulnerable_to_command_exec = await test_command_execution_in_form(self, form=form, url=link,
                                                                                          max_concurrent_requests=max_concurrent_requests)
                     if any(result[0] for result in is_vulnerable_to_command_exec):
@@ -182,6 +186,6 @@ def run_scanner(case, path_to_links_to_crawler, submit_form_post, verbose, max_c
 if __name__ == '__main__':
     run_scanner(case={'command_in_form'},
                 path_to_links_to_crawler="input_data/LINKS_TO_CRAWLER.txt",
-                submit_form_post="Y",
+                submit_form_post="N",
                 verbose="N",
                 max_concurrent_requests=20)
